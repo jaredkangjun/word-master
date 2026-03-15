@@ -39,6 +39,7 @@ function migrateWord(oldWord: Partial<Word>): Word {
     meaning: oldWord.meaning || '',
     example: oldWord.example,
     exampleTranslation: oldWord.exampleTranslation,
+    audioUrl: oldWord.audioUrl, // 添加 audioUrl 支持
     tags: oldWord.tags || [],
     difficulty: oldWord.difficulty || 'medium',
     createdAt: oldWord.createdAt || now,
@@ -47,7 +48,7 @@ function migrateWord(oldWord: Partial<Word>): Word {
     correctCount: oldWord.correctCount || 0,
     masteryLevel: oldWord.masteryLevel || 0,
     // SRS 新字段
-    nextReviewDate: oldWord.nextReviewDate || now, // 新词立即可以复习
+    nextReviewDate: oldWord.nextReviewDate || now,
     reviewStage: oldWord.reviewStage ?? 0,
     easeFactor: oldWord.easeFactor ?? 2.5,
     isNew: oldWord.isNew ?? (oldWord.reviewCount === 0),

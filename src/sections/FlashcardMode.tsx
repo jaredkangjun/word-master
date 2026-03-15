@@ -14,7 +14,7 @@ import {
   Clock,
   BookOpen
 } from 'lucide-react';
-import { playWordAudio } from '@/services/dictionaryService';
+import { playWordAudio, initVoices } from '@/services/dictionaryService';
 import type { Word, StudySession } from '@/types';
 
 interface FlashcardModeProps {
@@ -37,6 +37,7 @@ export function FlashcardMode({ words, onComplete, onUpdateMastery }: FlashcardM
 
   useEffect(() => {
     setStartTime(Date.now());
+    initVoices(); // 初始化语音
   }, []);
 
   const handleFlip = () => {
@@ -91,8 +92,9 @@ export function FlashcardMode({ words, onComplete, onUpdateMastery }: FlashcardM
     setIsFinished(true);
   };
 
-  const handlePlayAudio = (text: string) => {
-    playWordAudio(text);
+  const handlePlayAudio = () => {
+    if (!currentWord) return;
+    playWordAudio(currentWord.word, currentWord.audioUrl);
   };
 
   const goToPrevious = () => {
@@ -207,7 +209,7 @@ export function FlashcardMode({ words, onComplete, onUpdateMastery }: FlashcardM
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handlePlayAudio(currentWord.word);
+                  handlePlayAudio();
                 }}
                 className="text-indigo-600"
               >

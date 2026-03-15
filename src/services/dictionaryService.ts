@@ -201,16 +201,26 @@ export async function checkDictionaryAPI(): Promise<boolean> {
  * 优先使用在线音频，如果不存在则使用 Web Speech API
  */
 export function playWordAudio(word: string, audioUrl?: string): void {
-  // 如果有在线音频URL，优先使用
-  if (audioUrl) {
-    const audio = new Audio(audioUrl);
-    audio.play().catch(() => {
-      // 如果在线音频播放失败，回退到 Web Speech API
-      playWithSpeechSynthesis(word);
-    });
-  } else {
-    // 使用 Web Speech API
+  // 如果没有提供 audioUrl 或为空，直接使用 Web Speech API
+  if (!audioUrl || audioUrl.trim() === '') {
     playWithSpeechSynthesis(word);
+    return;
+  }
+
+  const audio = new Audio(audioUrl);
+  
+  // 处理音频播放
+  const playPromise = audio.play();
+  
+  if (playPromise !== undefined) {
+    playPromise
+      .then(() => {
+        console.log('Audio playback started');
+      })
+      .catch((error) => {
+        console.log('Audio playback failed, using speech synthesis:', error);
+        playWithSpeechSynthesis(word);
+      });
   }
 }
 
@@ -247,5 +257,20 @@ function playWithSpeechSynthesis(text: string): void {
 export function preloadVoices(): void {
   if ('speechSynthesis' in window) {
     window.speechSynthesis.getVoices();
+  }
+}
+
+/**
+ * 初始化语音列表
+ */
+export function initVoices(): void {
+  if ('speechSynthesis' in window) {
+    // 触发语音加载
+    window.speechSynthesis.getVoices();
+    
+    // 某些浏览器需要监听 voiceschanged 事件
+    window.speechSynthesis.addEventListener('voiceschanged', () => {
+      console.log('Voices loaded:', window.speechSynthesis.getVoices().length);
+    });
   }
 }

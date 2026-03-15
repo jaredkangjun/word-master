@@ -6,6 +6,7 @@ export interface Word {
   meaning: string;
   example?: string;
   exampleTranslation?: string;
+  audioUrl?: string;  // 发音音频URL
   tags: string[];
   difficulty: 'easy' | 'medium' | 'hard';
   createdAt: number;
