@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWordStorage } from '@/hooks/useWordStorage';
-import { Dashboard } from '@/sections/Dashboard';
+import { KidsDashboard } from '@/sections/KidsDashboard';
+import { BookSelector } from '@/sections/BookSelector';
 import { WordList } from '@/sections/WordList';
 import { FlashcardMode } from '@/sections/FlashcardMode';
 import { QuizMode } from '@/sections/QuizMode';
@@ -16,14 +17,22 @@ import {
   Trophy,
   Sparkles,
   Flame,
-  Target
+  Target,
+  ChevronLeft,
+  Library
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import type { WordBook } from '@/data/wordBooks';
+import { getBookById } from '@/data/wordBooks';
 
-type ViewMode = 'dashboard' | 'words' | 'flashcard' | 'quiz' | 'spelling' | 'achievements';
+type ViewMode = 'dashboard' | 'books' | 'words' | 'flashcard' | 'quiz' | 'spelling' | 'achievements';
+
+const CURRENT_BOOK_KEY = 'wordmaster_current_book_id';
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('dashboard');
+  const [currentBook, setCurrentBook] = useState<WordBook | undefined>(undefined);
+  
   const {
     words,
     progress,
@@ -31,6 +40,7 @@ function App() {
     dailyGoal,
     isLoaded,
     addWord,
+    addWords,
     updateWord,
     deleteWord,
     clearAllData,
@@ -39,21 +49,63 @@ function App() {
     setDailyTarget,
     getWordsToReview,
     getTodayReviewStats,
-    // addWords, // 暂时未使用，但保留用于批量导入
-    exportToJSON,
-    exportToCSV,
-    importFromJSON,
-    importFromCSV,
     importSampleWords,
     hasImportedSample,
   } = useWordStorage();
 
+  // 加载当前选中的课本
+  useEffect(() => {
+    const savedBookId = localStorage.getItem(CURRENT_BOOK_KEY);
+    if (savedBookId) {
+      const book = getBookById(savedBookId);
+      if (book) {
+        setCurrentBook(book);
+      }
+    }
+  }, []);
+
+  // 保存选中的课本
+  const handleSelectBook = (book: WordBook) => {
+    setCurrentBook(book);
+    localStorage.setItem(CURRENT_BOOK_KEY, book.id);
+    
+    // 导入课本单词
+    const wordsToAdd = book.units
+      .flatMap(unit => unit.words)
+      .filter(w => w.word && w.meaning)
+      .map(w => ({
+        word: w.word,
+        meaning: w.meaning,
+        phonetic: w.phonetic,
+        example: w.example,
+        exampleTranslation: w.exampleTranslation,
+        audioUrl: w.audioUrl,
+        tags: w.tags || [book.name],
+        difficulty: w.difficulty || 'easy',
+      }));
+    
+    if (wordsToAdd.length > 0) {
+      // 检查是否已经有这些单词
+      const existingWords = new Set(words.map(w => w.word.toLowerCase()));
+      const newWords = wordsToAdd.filter(w => !existingWords.has(w.word.toLowerCase()));
+      
+      if (newWords.length > 0) {
+        addWords(newWords);
+        toast.success(`已导入 ${newWords.length} 个新单词！`);
+      } else {
+        toast.info('这些单词已经在你的学习列表中了');
+      }
+    }
+    
+    setCurrentView('dashboard');
+  };
+
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
-        <div className="flex items-center gap-3 text-indigo-600">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-current"></div>
-          <span className="text-lg font-medium">加载中...</span>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
+        <div className="text-center space-y-4">
+          <div className="text-6xl animate-bounce">📚</div>
+          <div className="text-lg font-medium text-amber-700">加载中...</div>
         </div>
       </div>
     );
@@ -63,30 +115,27 @@ function App() {
     switch (currentView) {
       case 'dashboard':
         return (
-          <Dashboard
+          <KidsDashboard
             progress={progress}
             dailyGoal={dailyGoal}
             achievements={achievements}
             words={words}
-            todayReviewStats={getTodayReviewStats()}
-            hasImportedSample={hasImportedSample()}
+            currentBook={currentBook}
             onStartStudy={(mode) => {
-              if (getWordsToReview().length === 0 && words.length > 0) {
+              if (mode === 'flashcard' && getWordsToReview().length === 0 && words.length > 0) {
                 toast.info('没有待复习的单词，去添加一些新单词吧！');
                 return;
               }
               setCurrentView(mode);
             }}
-            onSetDailyTarget={setDailyTarget}
-            onImportSampleWords={importSampleWords}
-            onExportJSON={exportToJSON}
-            onExportCSV={exportToCSV}
-            onImportJSON={importFromJSON}
-            onImportCSV={importFromCSV}
-            onClearAllData={() => {
-              clearAllData();
-              toast.success('数据已清空');
-            }}
+            onOpenBookSelector={() => setCurrentView('books')}
+          />
+        );
+      case 'books':
+        return (
+          <BookSelector
+            onSelectBook={handleSelectBook}
+            currentBookId={currentBook?.id}
           />
         );
       case 'words':
@@ -144,77 +193,102 @@ function App() {
 
   const navItems = [
     { id: 'dashboard' as ViewMode, label: '首页', icon: BookOpen },
-    { id: 'words' as ViewMode, label: '单词库', icon: List },
+    { id: 'books' as ViewMode, label: '课本', icon: Library },
+    { id: 'words' as ViewMode, label: '单词', icon: List },
     { id: 'flashcard' as ViewMode, label: '卡片', icon: Layers },
-    { id: 'quiz' as ViewMode, label: '测试', icon: HelpCircle },
+    { id: 'quiz' as ViewMode, label: '游戏', icon: HelpCircle },
     { id: 'spelling' as ViewMode, label: '拼写', icon: Edit3 },
     { id: 'achievements' as ViewMode, label: '成就', icon: Trophy },
   ];
 
+  // 儿童版简化导航
+  const kidsNavItems = [
+    { id: 'dashboard' as ViewMode, label: '首页', icon: BookOpen, emoji: '🏠' },
+    { id: 'books' as ViewMode, label: '课本', icon: Library, emoji: '📚' },
+    { id: 'flashcard' as ViewMode, label: '学习', icon: Layers, emoji: '📖' },
+    { id: 'quiz' as ViewMode, label: '游戏', icon: HelpCircle, emoji: '🎮' },
+    { id: 'achievements' as ViewMode, label: '成就', icon: Trophy, emoji: '🏆' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50">
       <Toaster position="top-center" richColors />
       
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-indigo-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+      {/* Header - 儿童版 */}
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-amber-200 shadow-sm">
+        <div className="max-w-3xl mx-auto px-4">
+          <div className="flex items-center justify-between h-14">
             {/* Logo */}
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-xl shadow-md">
+                🌟
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                WordMaster
+              <span className="text-lg font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+                单词小达人
               </span>
             </div>
 
             {/* Stats */}
-            <div className="hidden sm:flex items-center gap-6">
-              <div className="flex items-center gap-2 text-amber-600">
-                <Flame className="w-5 h-5" />
-                <span className="font-semibold">{progress.streakDays} 天</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-600">
+                <span>🔥</span>
+                <span className="text-sm font-bold">{progress.streakDays}</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-600">
-                <Target className="w-5 h-5" />
-                <span className="font-semibold">{dailyGoal.completedWords}/{dailyGoal.targetWords}</span>
+              <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-600">
+                <span>⭐</span>
+                <span className="text-sm font-bold">{dailyGoal.completedWords}/{dailyGoal.targetWords}</span>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Navigation */}
-      <nav className="sticky top-16 z-40 bg-white/60 backdrop-blur-sm border-b border-indigo-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-1 py-2 overflow-x-auto scrollbar-hide">
-            {navItems.map((item) => {
-              const Icon = item.icon;
+      {/* Back Button for sub-pages */}
+      {currentView !== 'dashboard' && (
+        <div className="max-w-3xl mx-auto px-4 pt-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCurrentView('dashboard')}
+            className="text-slate-500"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            返回首页
+          </Button>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <main className="max-w-3xl mx-auto px-4 py-4 pb-24">
+        {renderView()}
+      </main>
+
+      {/* Bottom Navigation - 儿童版 */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-amber-200 shadow-lg z-50">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center justify-around py-2">
+            {kidsNavItems.map((item) => {
+              const isActive = currentView === item.id;
               return (
-                <Button
+                <button
                   key={item.id}
-                  variant={currentView === item.id ? 'default' : 'ghost'}
-                  size="sm"
                   onClick={() => setCurrentView(item.id)}
-                  className={`flex items-center gap-2 whitespace-nowrap ${
-                    currentView === item.id
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white'
-                      : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50'
+                  className={`flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition-all ${
+                    isActive
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </Button>
+                  <span className="text-xl">{item.emoji}</span>
+                  <span className={`text-xs font-medium ${isActive ? 'text-amber-700' : ''}`}>
+                    {item.label}
+                  </span>
+                </button>
               );
             })}
           </div>
         </div>
       </nav>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {renderView()}
-      </main>
     </div>
   );
 }
