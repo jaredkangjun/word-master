@@ -1,5 +1,8 @@
 import { toast } from 'sonner';
 
+// 音频缓存 - 避免重复请求
+const audioCache = new Map<string, string>();
+
 export interface DictionaryEntry {
   word: string;
   phonetic: string;
@@ -21,10 +24,10 @@ export interface DictionaryEntry {
 export interface WordInfo {
   word: string;
   phonetic: string;
-  meaning: string; // 中文翻译
+  meaning: string;
   example: string;
   exampleTranslation: string;
-  audioUrl?: string; // 发音音频URL
+  audioUrl?: string;
 }
 
 /**
@@ -42,7 +45,6 @@ async function translateToChinese(text: string): Promise<string> {
     
     const data = await response.json();
     
-    // Google Translate 返回格式: [[[翻译结果, 原文], ...], ...]
     if (data && data[0] && data[0][0] && data[0][0][0]) {
       return data[0][0][0];
     }
@@ -56,8 +58,6 @@ async function translateToChinese(text: string): Promise<string> {
 
 /**
  * 从 Free Dictionary API 获取单词信息
- * 并翻译成中文
- * API 文档: https://dictionaryapi.dev/
  */
 export async function lookupWord(word: string): Promise<WordInfo | null> {
   if (!word.trim()) {
@@ -66,7 +66,6 @@ export async function lookupWord(word: string): Promise<WordInfo | null> {
   }
 
   try {
-    // 1. 获取词典信息
     const response = await fetch(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.trim().toLowerCase())}`
     );
@@ -89,19 +88,15 @@ export async function lookupWord(word: string): Promise<WordInfo | null> {
 
     const entry = data[0];
     
-    // 提取音标
     const phonetic = entry.phonetic || 
       entry.phonetics?.find(p => p.text)?.text || 
       '';
 
-    // 提取发音音频URL
     const audioUrl = entry.phonetics?.find(p => p.audio)?.audio || '';
 
-    // 提取释义和例句
     let englishDefinition = '';
     let example = '';
     
-    // 优先使用名词释义，然后是动词，最后是第一个可用的
     const meanings = entry.meanings || [];
     const nounMeaning = meanings.find(m => m.partOfSpeech === 'noun');
     const verbMeaning = meanings.find(m => m.partOfSpeech === 'verb');
@@ -114,7 +109,6 @@ export async function lookupWord(word: string): Promise<WordInfo | null> {
       englishDefinition = firstDef.definition;
       example = firstDef.example || '';
       
-      // 如果没有找到例句，尝试其他定义
       if (!example) {
         for (const def of selectedMeaning.definitions.slice(1)) {
           if (def.example) {
@@ -125,7 +119,6 @@ export async function lookupWord(word: string): Promise<WordInfo | null> {
       }
     }
 
-    // 如果还是没有例句，尝试其他词性
     if (!example) {
       for (const m of meanings) {
         for (const def of m.definitions) {
@@ -138,13 +131,11 @@ export async function lookupWord(word: string): Promise<WordInfo | null> {
       }
     }
 
-    // 2. 将英文释义翻译成中文
     let chineseMeaning = '';
     if (englishDefinition) {
       chineseMeaning = await translateToChinese(englishDefinition);
     }
 
-    // 3. 翻译例句
     let exampleTranslation = '';
     if (example) {
       exampleTranslation = await translateToChinese(example);
@@ -153,7 +144,7 @@ export async function lookupWord(word: string): Promise<WordInfo | null> {
     return {
       word: entry.word,
       phonetic,
-      meaning: chineseMeaning || englishDefinition, // 如果翻译失败，使用原文
+      meaning: chineseMeaning || englishDefinition,
       example,
       exampleTranslation,
       audioUrl,
@@ -166,66 +157,78 @@ export async function lookupWord(word: string): Promise<WordInfo | null> {
 }
 
 /**
- * 批量查询多个单词（用于导入功能）
+ * 使用 Google Translate TTS 生成音频 URL
  */
-export async function lookupWords(words: string[]): Promise<Map<string, WordInfo>> {
-  const results = new Map<string, WordInfo>();
-  
-  // 串行查询，避免触发频率限制
-  for (const word of words) {
-    const info = await lookupWord(word);
-    if (info) {
-      results.set(word.toLowerCase(), info);
-    }
-    // 添加小延迟，避免请求过快
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-  
-  return results;
+function getGoogleTTSUrl(text: string): string {
+  const limitedText = text.slice(0, 100);
+  return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(limitedText)}&tl=en&client=tw-ob`;
 }
 
 /**
- * 检查 API 是否可用
+ * 使用 ResponsiveVoice TTS（备用方案）
  */
-export async function checkDictionaryAPI(): Promise<boolean> {
-  try {
-    const response = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/hello');
-    return response.ok;
-  } catch {
-    return false;
-  }
+function getResponsiveVoiceUrl(text: string): string {
+  const limitedText = encodeURIComponent(text.slice(0, 100));
+  return `https://code.responsivevoice.org/getvoice.php?t=${limitedText}&tl=en-US&sv=g1&vn=&pitch=0.5&rate=0.5&vol=1`;
 }
 
 /**
  * 播放单词发音
- * 优先使用在线音频，如果不存在则使用 Web Speech API
  */
 export function playWordAudio(word: string, audioUrl?: string): void {
-  // 如果没有提供 audioUrl 或为空，直接使用 Web Speech API
-  if (!audioUrl || audioUrl.trim() === '') {
+  if (!word) return;
+
+  const ttsUrls = [
+    audioUrl,
+    audioCache.get(word.toLowerCase()),
+    getGoogleTTSUrl(word),
+    getResponsiveVoiceUrl(word),
+  ].filter(Boolean) as string[];
+
+  if (ttsUrls.length === 0) {
     playWithSpeechSynthesis(word);
     return;
   }
 
-  const audio = new Audio(audioUrl);
+  tryPlayAudio(ttsUrls, 0, word);
+}
+
+/**
+ * 依次尝试播放音频 URL
+ */
+function tryPlayAudio(urls: string[], index: number, fallbackText: string): void {
+  if (index >= urls.length) {
+    playWithSpeechSynthesis(fallbackText);
+    return;
+  }
+
+  const url = urls[index];
+  const audio = new Audio(url);
   
-  // 处理音频播放
+  audio.crossOrigin = 'anonymous';
+  audio.preload = 'auto';
+  
   const playPromise = audio.play();
   
   if (playPromise !== undefined) {
     playPromise
       .then(() => {
-        console.log('Audio playback started');
+        console.log('Audio playback started:', url);
+        if (!audioCache.has(fallbackText.toLowerCase())) {
+          audioCache.set(fallbackText.toLowerCase(), url);
+        }
       })
       .catch((error) => {
-        console.log('Audio playback failed, using speech synthesis:', error);
-        playWithSpeechSynthesis(word);
+        console.log('Audio playback failed:', url, error);
+        tryPlayAudio(urls, index + 1, fallbackText);
       });
+  } else {
+    tryPlayAudio(urls, index + 1, fallbackText);
   }
 }
 
 /**
- * 使用 Web Speech API 播放发音
+ * 使用 Web Speech API 播放发音（备用方案）
  */
 function playWithSpeechSynthesis(text: string): void {
   if (!('speechSynthesis' in window)) {
@@ -233,26 +236,28 @@ function playWithSpeechSynthesis(text: string): void {
     return;
   }
 
-  // 取消之前的朗读
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'en-US';
-  utterance.rate = 0.9; // 稍微慢一点，更清晰
+  utterance.rate = 0.9;
   utterance.pitch = 1;
   
-  // 尝试使用英语语音
   const voices = window.speechSynthesis.getVoices();
   const englishVoice = voices.find(v => v.lang.startsWith('en'));
   if (englishVoice) {
     utterance.voice = englishVoice;
   }
 
+  utterance.onerror = () => {
+    toast.error('语音播放失败，请检查浏览器设置');
+  };
+
   window.speechSynthesis.speak(utterance);
 }
 
 /**
- * 预加载语音列表（某些浏览器需要）
+ * 预加载语音列表
  */
 export function preloadVoices(): void {
   if ('speechSynthesis' in window) {
@@ -265,10 +270,8 @@ export function preloadVoices(): void {
  */
 export function initVoices(): void {
   if ('speechSynthesis' in window) {
-    // 触发语音加载
     window.speechSynthesis.getVoices();
     
-    // 某些浏览器需要监听 voiceschanged 事件
     window.speechSynthesis.addEventListener('voiceschanged', () => {
       console.log('Voices loaded:', window.speechSynthesis.getVoices().length);
     });
