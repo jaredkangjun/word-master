@@ -9,17 +9,7 @@ import { SpellingMode } from '@/sections/SpellingMode';
 import { Achievements } from '@/sections/Achievements';
 import { Button } from '@/components/ui/button';
 import { 
-  BookOpen, 
-  List, 
-  Layers, 
-  HelpCircle, 
-  Edit3, 
-  Trophy,
-  Sparkles,
-  Flame,
-  Target,
-  ChevronLeft,
-  Library
+  ChevronLeft
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import type { WordBook } from '@/data/wordBooks';
@@ -43,14 +33,9 @@ function App() {
     addWords,
     updateWord,
     deleteWord,
-    clearAllData,
     recordSession,
     updateWordMastery,
-    setDailyTarget,
     getWordsToReview,
-    getTodayReviewStats,
-    importSampleWords,
-    hasImportedSample,
   } = useWordStorage();
 
   // 加载当前选中的课本
@@ -191,23 +176,13 @@ function App() {
     }
   };
 
-  const navItems = [
-    { id: 'dashboard' as ViewMode, label: '首页', icon: BookOpen },
-    { id: 'books' as ViewMode, label: '课本', icon: Library },
-    { id: 'words' as ViewMode, label: '单词', icon: List },
-    { id: 'flashcard' as ViewMode, label: '卡片', icon: Layers },
-    { id: 'quiz' as ViewMode, label: '游戏', icon: HelpCircle },
-    { id: 'spelling' as ViewMode, label: '拼写', icon: Edit3 },
-    { id: 'achievements' as ViewMode, label: '成就', icon: Trophy },
-  ];
-
   // 儿童版简化导航
   const kidsNavItems = [
-    { id: 'dashboard' as ViewMode, label: '首页', icon: BookOpen, emoji: '🏠' },
-    { id: 'books' as ViewMode, label: '课本', icon: Library, emoji: '📚' },
-    { id: 'flashcard' as ViewMode, label: '学习', icon: Layers, emoji: '📖' },
-    { id: 'quiz' as ViewMode, label: '游戏', icon: HelpCircle, emoji: '🎮' },
-    { id: 'achievements' as ViewMode, label: '成就', icon: Trophy, emoji: '🏆' },
+    { id: 'dashboard' as ViewMode, label: '首页', emoji: '🏠' },
+    { id: 'books' as ViewMode, label: '课本', emoji: '📚' },
+    { id: 'flashcard' as ViewMode, label: '学习', emoji: '📖' },
+    { id: 'quiz' as ViewMode, label: '游戏', emoji: '🎮' },
+    { id: 'achievements' as ViewMode, label: '成就', emoji: '🏆' },
   ];
 
   return (

@@ -1,18 +1,11 @@
-import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { 
-  BookOpen, 
-  Target, 
-  Flame, 
-  Star, 
-  Trophy,
-  Zap,
+  Target,
   ChevronRight,
   Sparkles,
-  GraduationCap
 } from 'lucide-react';
 import type { LearningProgress, DailyGoal, Achievement, Word } from '@/types';
 import type { WordBook } from '@/data/wordBooks';
@@ -36,15 +29,12 @@ export function KidsDashboard({
   onStartStudy,
   onOpenBookSelector,
 }: KidsDashboardProps) {
-  const [showCelebration, setShowCelebration] = useState(false);
-
   const masteredWords = words.filter(w => w.reviewStage >= 6 || w.masteryLevel >= 80).length;
   const learningWords = words.filter(w => w.reviewStage < 6 && w.reviewStage > 0).length;
   const unlockedAchievements = achievements.filter(a => a.unlockedAt);
   
   // 计算等级
   const level = Math.floor(masteredWords / 10) + 1;
-  const levelProgress = (masteredWords % 10) / 10 * 100;
   
   // 今日目标进度
   const dailyProgress = Math.min(100, (dailyGoal.completedWords / dailyGoal.targetWords) * 100);

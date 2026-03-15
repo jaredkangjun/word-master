@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { wordBooks, getAllGrades, getBooksByGrade, type WordBook } from '@/data/wordBooks';
+import { getAllGrades, getBooksByGrade, type WordBook } from '@/data/wordBooks';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
